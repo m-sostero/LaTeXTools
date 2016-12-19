@@ -1,8 +1,10 @@
 import base64
 import html
+import inspect
 import os
 import re
 import struct
+import subprocess
 import threading
 import time
 import types
@@ -15,7 +17,7 @@ from ..parseTeXlog import parse_tex_log
 from ..latextools_utils import cache, get_setting
 from ..latextools_utils.external_command import execute_command
 from . import preview_utils
-from .preview_utils import convert_installed, run_convert_command
+from .preview_utils import ghostscript_installed, run_ghostscript_command
 from . import preview_threading as pv_threading
 
 # export the listener
@@ -25,6 +27,9 @@ exports = ["MathPreviewPhantomListener"]
 # generated images as expired
 _version = 1
 
+# use this variable to disable the plugin for a session
+# (until ST is restarted)
+_IS_ENABLED = True
 
 try:
     import mdpopups
@@ -42,7 +47,7 @@ except:
 
 # the default and usual template for the latex file
 default_latex_template = """
-\\documentclass[preview]{standalone}
+\\documentclass[preview,border=0.3pt]{standalone}
 % import xcolor if available and not already present
 \\IfFileExists{xcolor.sty}{\\usepackage{xcolor}}{}%
 <<packages>>
@@ -82,7 +87,6 @@ def _on_setting_change():
 
 
 def plugin_loaded():
-    print('plugin_loaded in preview_math called')
     global _lt_settings, temp_path
     _lt_settings = sublime.load_settings("LaTeXTools.sublime-settings")
 
@@ -101,6 +105,8 @@ def plugin_loaded():
 
 
 def plugin_unloaded():
+    global _IS_ENABLED
+    _IS_ENABLED = False
     _lt_settings.clear_on_change("lt_preview_math_main")
 
 
@@ -133,15 +139,59 @@ def _create_image(latex_program, latex_document, base_name, color,
             pdf_exists = True
 
     if pdf_exists:
+        # get the cropping boundaries; note that the relevant output is
+        # written to STDERR rather than STDOUT; we specify 72 dpi in order to
+        # speed up processing; the user-supplied density will be used in
+        # making the actual conversion
+        rc, _, output = run_ghostscript_command([
+            '-sDEVICE=bbox', '-r72', '-dLastPage=1', pdf_path
+        ], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+
+        if rc == 0:
+            # we only check the first line of output which should be in the
+            # format:
+            # %%BoundingBox: int int int int
+            try:
+                bbox = [
+                    int(x) for x in
+                    output.splitlines()[0].lstrip('%%BoundingBox: ').split()
+                ]
+            except ValueError:
+                bbox = None
+        else:
+            bbox = None
+
         # convert the pdf to a png image
-        density = _density
-        run_convert_command([
-            # set the image size/density
-            '-density', '{density}x{density}'.format(density=density),
-            # trim the content to the real size
-            '-trim',
-            pdf_path, image_path
-        ])
+        command = [
+            '-sDEVICE=pngalpha', '-dLastPage=1',
+            '-sOutputFile={image_path}'.format(image_path=image_path),
+            '-r{density}'.format(density=_density)
+        ]
+
+        # calculate and apply cropping boundaries, if we have them
+        if bbox:
+            # coordinates in bounding box given in the form:
+            # (ll_x, ll_y), (ur_x, ur_y)
+            # where ll is lower left and ur is upper right
+            # 4pts are added to each length for some padding
+            # these are then multiplied by the ratio of the final density to
+            # the PDFs DPI (72) to get the final size of the image in pixels
+            width = round((bbox[2] - bbox[0] + 4) * _density / 72)
+            height = round((bbox[3] - bbox[1] + 4) * _density / 72)
+            command.extend([
+                '-g{width}x{height}'.format(**locals()), '-c',
+                # this is the command that does the clipping starting from
+                # the lower left of the displayed contents; we subtract 2pts
+                # to properly center the final image with our padding
+                '<</Install {{{0} {1} translate}}>> setpagedevice'.format(
+                    -1 * (bbox[0] - 2), -1 * (bbox[1] - 2)
+                ),
+                '-f'
+            ])
+
+        command.append(pdf_path)
+
+        run_ghostscript_command(command)
 
     err_file_path = image_path + _ERROR_EXTENSION
     err_log = []
@@ -273,7 +323,8 @@ def _generate_error_html(view, image_path, style_kwargs):
     html_content += (
         '<br>'
         '<a href="check_system">(Check System)</a> '
-        '<a href="report-{err_file}">(Show Report)</a>'
+        '<a href="report-{err_file}">(Show Report)</a> '
+        '<a href="disable">(Disable)</a>'
         .format(**locals())
     )
 
@@ -458,8 +509,12 @@ class MathPreviewPhantomListener(sublime_plugin.ViewEventListener,
 
     @classmethod
     def is_applicable(cls, settings):
-        syntax = settings.get('syntax')
-        return syntax == 'Packages/LaTeX/LaTeX.sublime-syntax'
+        try:
+            view = inspect.currentframe().f_back.f_locals['view']
+            return view.score_selector(0, 'text.tex.latex') > 0
+        except KeyError:
+            syntax = settings.get('syntax')
+            return syntax == 'Packages/LaTeX/LaTeX.sublime-syntax'
 
     @classmethod
     def applies_to_primary_view_only(cls):
@@ -501,8 +556,25 @@ class MathPreviewPhantomListener(sublime_plugin.ViewEventListener,
     #########
 
     def on_navigate(self, href):
+        global _IS_ENABLED
         if href == "check_system":
             self.view.window().run_command("latextools_system_check")
+        elif href == "disable":
+            answer = sublime.yes_no_cancel_dialog(
+                "The math-live preview will be temporary disabled until "
+                "you restart Sublime Text. If you want to disable it "
+                "permanent open your LaTeXTools settings and set "
+                "\"preview_math_mode\" to \"none\".",
+                yes_title="Open LaTeXTools settings",
+                no_title="Disable for this session"
+            )
+            if answer == sublime.DIALOG_CANCEL:
+                # do nothing
+                return
+            _IS_ENABLED = False
+            self.update_phantoms()
+            if answer == sublime.DIALOG_YES:
+                self.view.window().run_command("open_latextools_user_settings")
         elif href.startswith("report-"):
             file_path = href[len("report-"):]
             if not os.path.exists(file_path):
@@ -534,14 +606,19 @@ class MathPreviewPhantomListener(sublime_plugin.ViewEventListener,
         # not sure why this happens, but ignore these cases
         if self.view.window() is None:
             return
-        if not convert_installed():
+        if not ghostscript_installed():
             return
 
         view = self.view
+        window = view.window()
 
-        if not any(view.window().active_view_in_group(g) == view
-                   for g in range(view.window().num_groups())):
-            return
+        # see #980; in any case window is None only for newly created views
+        # where there isn't much point in running the phantom update.
+        if (window is None or
+            not any(window.active_view_in_group(g) == view
+                    for g in range(window.num_groups()))):
+                return
+
         # TODO we may only want to apply if the view is visible
         # if view != view.window().active_view():
         #     return
@@ -551,7 +628,11 @@ class MathPreviewPhantomListener(sublime_plugin.ViewEventListener,
 
         new_phantoms = []
         job_args = []
-        if self.visible_mode == "all":
+        if not _IS_ENABLED or self.visible_mode == "none":
+            if not self.phantoms:
+                return
+            scopes = []
+        elif self.visible_mode == "all":
             scopes = view.find_by_selector(
                 "text.tex.latex meta.environment.math")
         elif self.visible_mode == "selected":
@@ -559,10 +640,6 @@ class MathPreviewPhantomListener(sublime_plugin.ViewEventListener,
                 "text.tex.latex meta.environment.math")
             scopes = [scope for scope in math_scopes
                       if any(scope.contains(sel) for sel in view.sel())]
-        elif self.visible_mode == "none":
-            if not self.phantoms:
-                return
-            scopes = []
         else:
             self.visible_mode = "none"
             scopes = []
@@ -699,24 +776,28 @@ class MathPreviewPhantomListener(sublime_plugin.ViewEventListener,
             scope_end = scope.end()
             line_reg = view.line(scope_end)
             after_reg = sublime.Region(scope_end, line_reg.end())
-            after_str = view.substr(line_reg)
+            after_str = view.substr(after_reg)
             m = re.match(r"\\end\{([^\}]+?)(\*?)\}", after_str)
             if m:
                 env = m.group(1)
 
-        # strip the content
+        # create the opening and closing string
         if offset:
+            open_str = content[:offset]
+            close_str = content[-offset:]
+            # strip those strings from the content
             content = content[offset:-offset]
-        content = content.strip()
-
-        # create the wrap string
-        open_str = "\\("
-        close_str = "\\)"
-        if env:
+        elif env:
             star = "*" if env not in self.no_star_env or m.group(2) else ""
             # add a * to the env to avoid numbers in the resulting image
             open_str = "\\begin{{{env}{star}}}".format(**locals())
             close_str = "\\end{{{env}{star}}}".format(**locals())
+        else:
+            open_str = "\\("
+            close_str = "\\)"
+
+        # strip the content
+        content = content.strip()
 
         document_content = (
             "{open_str}\n{content}\n{close_str}"
