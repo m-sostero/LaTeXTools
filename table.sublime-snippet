@@ -2,22 +2,15 @@
 	<content><![CDATA[
 \begin{table}[${1:tb}]
 	\caption{${2:caption here}}
-	\label{${3:tab:tablename}}
+	\label{tab:${3:table_label}}
 	\centering
 
-	\begin{tabular}{${4:l|cc}}
-	\hline
+	$0
 
-	\hline
-	\textbf{${5:column 1}} & \textbf{${6:column 2}} & \textbf{${7:column 3}} \\\\
-	\hline
-		 & & \\\\
-	\hline
-
-	\hline
-	\end{tabular}
 \end{table}
+
 ]]></content>
-	<tabTrigger>btable</tabTrigger>
+	<tabTrigger>table</tabTrigger>
 	<scope>text.tex.latex</scope>
+	<description>Insert table</description>
 </snippet>

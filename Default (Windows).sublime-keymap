@@ -255,8 +255,7 @@ LaTeX Package keymap for Windows
 			{"key": "selector", "operator": "equal", "operand": "text.tex.latex"}],
 		"command": "insert_snippet", "args": {"name":"Packages/LaTeXTools/Text emphasize.sublime-snippet"}},
 	{ "keys": ["ctrl+l","ctrl+b"],  
-		"context":  [
-			{"key": "selector", "operator": "equal", "operand": "text.tex.latex"}],
+		"context":  [{"key": "selector", "operator": "equal", "operand": "text.tex.latex"}],
 		"command": "insert_snippet", "args": {"name":"Packages/LaTeXTools/Text boldface.sublime-snippet"}},
 	{ "keys": ["ctrl+l","ctrl+u"],  
 		"context":  [
@@ -438,7 +437,7 @@ LaTeX Package keymap for Windows
 
 	// shift+super+{up,down} for super/subscripts with braces
 	// (courtesy of Tobias Schmidt; I only changed the keybindings)
-	{ "keys": ["shift+super+down"], "command": "insert_snippet", "args": {"contents": "_{$1}$0"}, 
+	{ "keys": ["_"], "command": "insert_snippet", "args": {"contents": "_{$1}$0"}, 
 	"context":  
 		[
 			{"key": "selector", "operator": "equal", "operand": "text.tex.latex string.other.math"},
@@ -447,7 +446,7 @@ LaTeX Package keymap for Windows
 		]
 	},
 
-	{ "keys": ["shift+super+up"], "command": "insert_snippet", "args": {"contents": "^{$1}$0"}, 
+	{ "keys": ["^"], "command": "insert_snippet", "args": {"contents": "^{$1}$0"}, 
 	"context":  
 		[
 			{"key": "selector", "operator": "equal", "operand": "text.tex.latex string.other.math"},
