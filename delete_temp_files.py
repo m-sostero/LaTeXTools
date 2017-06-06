@@ -26,6 +26,24 @@ import shutil
 import traceback
 
 
+class LatextoolsClearCacheCommand(sublime_plugin.WindowCommand):
+	def run(self):
+		try:
+			shutil.rmtree(cache._global_cache_path())
+		except:
+			print('Error while trying to delete global cache')
+			traceback.print_exc()
+			try:
+				shutil.rmtree(cache._local_cache_path())
+			except:
+				print('Error while trying to delete local cache')
+				traceback.print_exc()
+		window = self.window
+		if window.active_view().score_selector(0, "text.tex.latex"):
+			window.run_command("clear_local_latex_cache")
+			window.run_command("clear_bibliography_cache")
+
+
 class ClearLocalLatexCacheCommand(sublime_plugin.WindowCommand):
 
 	def is_visible(self, *args):
@@ -135,11 +153,11 @@ class DeleteTempFilesCommand(sublime_plugin.WindowCommand):
 			traceback.print_exc()
 
 		aux_directory, aux_directory_setting = get_aux_directory(
-			root_file, return_setting=True
+			view, return_setting=True
 		)
 
 		output_directory, output_directory_setting = get_output_directory(
-			root_file, return_setting=True
+			view, return_setting=True
 		)
 
 		if aux_directory is not None:

@@ -532,7 +532,7 @@ class SystemCheckThread(threading.Thread):
         # This really only works for the default template
         # Note that no attempt is made to find other packages that the
         # included package depends on
-        if (_HAS_PREVIEW and convert_installed() and
+        if (_HAS_PREVIEW and ghostscript_installed() and
                 get_setting('preview_math_template_file') is None and
                 get_setting("preview_math_mode", view=self.view) != "none"):
 
@@ -639,15 +639,15 @@ class SystemCheckThread(threading.Thread):
             ])
 
             table = [[u'LaTeX Output Setting', u'Value']]
-            output_directory = get_output_directory(tex_root)
+            output_directory = get_output_directory(view)
             if output_directory:
                 table.append(
                     ['output_directory', output_directory]
                 )
-            aux_directory = get_aux_directory(tex_root)
+            aux_directory = get_aux_directory(view)
             if aux_directory:
                 table.append(['aux_directory', aux_directory])
-            jobname = get_jobname(tex_root)
+            jobname = get_jobname(view)
             if jobname and jobname != os.path.splitext(
                 os.path.basename(tex_root)
             )[0]:

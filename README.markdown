@@ -8,7 +8,7 @@ by Ian Bacher, Marciano Siniscalchi, and Richard Stein
 **Documentation:**
 <https://latextools.readthedocs.io>
 
-*Latest revision:* v3.13.5 (2017-03-31).
+*Latest revision:* v3.14.1 (2017-06-01).
 
 [![Package Control](https://img.shields.io/packagecontrol/dm/LaTeXTools.svg?maxAge=2592000)](https://packagecontrol.io/packages/LaTeXTools)
 
@@ -20,6 +20,16 @@ by Ian Bacher, Marciano Siniscalchi, and Richard Stein
 - Uses analysis for ref / cite commands and better caching
 - Improved fill all completions for large files
 - %!TEX directives now override settings in all circumstances
+
+## Prereleases
+
+LaTeXTools uses pre-releases to beta test new features and improve the stability of releases. If you also want to get the newest features and help us testing them. Just open *Preferences > Package Settings > Package Control > Settings - User* and insert at a reasonable (correct JSON syntax) position: 
+
+``` js
+    "install_prereleases": ["LaTeXTools"],
+```
+
+If you also use prereleases of other packages just add them comma separated into the list.
 
 
 ## Overview

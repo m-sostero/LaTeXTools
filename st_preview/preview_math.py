@@ -94,9 +94,6 @@ def plugin_loaded():
     _lt_settings = sublime.load_settings("LaTeXTools.sublime-settings")
 
     temp_path = os.path.join(cache._global_cache_path(), _name)
-    # validate the temporary file directory is available
-    if not os.path.exists(temp_path):
-        os.makedirs(temp_path)
 
     # init all variables
     _on_setting_change()
@@ -249,7 +246,7 @@ def _create_image(latex_program, latex_document, base_name, color,
         err_log.append("Failed to convert pdf to png to preview.")
 
     if err_log:
-        with open(err_file_path, "w") as f:
+        with open(err_file_path, "w", encoding="utf-8") as f:
             f.write("\n".join(err_log))
 
     # cleanup created files
@@ -295,6 +292,10 @@ def _extend_image_jobs(vid, latex_program, jobs):
 
 
 def _run_image_jobs():
+    # validate the temporary file directory is available
+    if not os.path.exists(temp_path):
+        os.makedirs(temp_path)
+
     if not pv_threading.has_function(_name):
         pv_threading.register_function(_name, _execute_job)
     pv_threading.run_jobs(_name)
@@ -440,6 +441,10 @@ class MathPreviewPhantomListener(sublime_plugin.ViewEventListener,
             },
             "background_color": {
                 "setting": "preview_math_background_color",
+                "call_after": self.reset_phantoms
+            },
+            "math_scope": {
+                "setting": "preview_math_scope",
                 "call_after": self.reset_phantoms
             },
             "packages": {
@@ -646,11 +651,9 @@ class MathPreviewPhantomListener(sublime_plugin.ViewEventListener,
                 return
             scopes = []
         elif self.visible_mode == "all":
-            scopes = view.find_by_selector(
-                "text.tex.latex meta.environment.math")
+            scopes = view.find_by_selector(self.math_scope)
         elif self.visible_mode == "selected":
-            math_scopes = view.find_by_selector(
-                "text.tex.latex meta.environment.math")
+            math_scopes = view.find_by_selector(self.math_scope)
             scopes = [scope for scope in math_scopes
                       if any(scope.contains(sel) for sel in view.sel())]
         else:
